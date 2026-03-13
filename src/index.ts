@@ -12,17 +12,21 @@ const supportedModelTypes: ModelType[] = ['claude', 'gpt']
 const ClaudeModel: Model = {
     name: "claude-haiku-4-5",
     type: "claude",
-    inputCostPerCS: 1, // USD cost per cost scale for input tokens, adjust based on actual pricing
-    outputCostPerCS: 5, // USD cost per cost scale for output tokens, adjust based on actual pricing
-    costScale: 1000000 // scale factor to convert token counts to cost (e.g., per 1000 tokens)
+    inputCostPerCS: 1, 
+    outputCostPerCS: 5, 
+    costScale: 1000000,
+    windowSize: 200000,
+    windowReservePercentage: 0.3 // can use 0.975 for testing, leaving 2.5% (5000 tokens) for input - reaches limit faster to test window management
 }
 
 const GptModel: Model = {
     name: "gpt-4.1-nano",
     type: "gpt",
-    inputCostPerCS: 0.00006, // USD cost per cost scale for input tokens, adjust based on actual pricing
-    outputCostPerCS: 0.00006, // USD cost per cost scale for output tokens, adjust based on actual pricing
-    costScale: 1000 // scale factor to convert token counts to cost (e.g., per 1000 tokens)
+    inputCostPerCS: 0.00006, 
+    outputCostPerCS: 0.00006, 
+    costScale: 1000, 
+    windowSize: 200000,
+    windowReservePercentage: 0.1
 }
 
 let currentModel = ClaudeModel
@@ -43,6 +47,7 @@ let session: Conversation = {
     }
 }
 
+// Command-line parameters
 if (cliArgs.model.toLowerCase() === 'claude') {
     setModel(ClaudeModel)
 } else if (cliArgs.model.toLowerCase() === 'openai') {
@@ -50,6 +55,15 @@ if (cliArgs.model.toLowerCase() === 'claude') {
 } else {
     console.error(`Unsupported model specified: ${cliArgs.model}. Defaulting to Claude.`)
     setModel(GptModel)
+}
+
+// TODO: add --stream and --verbose flag processing
+if (cliArgs.stream) {
+    console.log('Streaming mode enabled. (Not implemented yet)')
+}
+
+if (cliArgs.verbose) {
+    console.log('Verbose logging enabled. (Not implemented yet)')
 }
 
 // let conversationHistory: Array<{ role: string, content: string }> = []
@@ -71,6 +85,7 @@ console.log(`Welcome to the CLI Chatbot!`)
 console.log(`You are now in a session with ID: ${sessionId} using model: ${currentModel.name}`)
 console.log(`Type your message and press Enter to send. Type '/exit' or '/quit' to end the session.`)
 console.log(`Available commands: /model [model_name], /clear, /save, /export, /cost, /help`)
+console.log('\n')
 
 // Initial user prompt
 rl.prompt()
@@ -79,34 +94,43 @@ rl.prompt()
 //     rl.question(`Ask me a question: `, processQuery);
 // }
 
+function main() {
+    // Main function
+}
+
+
 async function processUserInput(query: string) {  
     console.log('\n')
     query = query.toLowerCase()
 
-    switch(query) {
-        case '/exit':
-        case '/quit':
+    switch(true) {
+        case query === '/exit':
+        case query === '/quit':
             endSession();
             return;
-        case '/model': // switch models
+        case (query.split(' ')[0]) === '/model': // switch models
             setModelByType(query);
             break;
-        case '/clear': // reset session message history
+        case query === '/clear': // reset session message history
             clearSessionMessages()
             break;
-        case '/save': // save session as JSON file
+        case query === '/save': // save session as JSON file
             saveSessionAsJson();
             break;
-        case '/export': // export to markdown
+        case query === '/export': // export to markdown
             exportSessionToMarkdown();
             break;
-        case '/cost': // show current session cost and token usage
+        case query === '/cost': // show current session cost and token usage
             displaySessionCostAndUsage()
             break;
-        case '/help':
+        case query === '/help':
             displayHelp()
             break;
-        case '':
+        case query[0] === '/':
+            console.log('Invalid command.')
+            displayHelp()
+            break;
+        case query.length === 0:
             console.log('Please enter a valid query or command. (/help for available commands)')
             break;
         default:
@@ -126,7 +150,7 @@ async function routeQuery(query: string) {
 }
 
 async function processQuery(query: string) {
-    console.log(`You asked: ${query}`);
+    // console.log(`You asked: ${query}`);
 
     // update session with user message
     const userMessage: Message = {
@@ -135,15 +159,34 @@ async function processQuery(query: string) {
         timestamp: new Date().toISOString()
     }
     updateSessionWithMessage(userMessage)
+
+    // TODO: add sliding context window management here.
     
-    console.log('Message history:')
-    console.dir(getSessionMessages(true))
+    // console.log('Message history:')
+    // console.dir(getSessionMessages(true))
 
     // send query to model and get response
-    let response = await sendQuery(getSessionMessages(true))
+    let response = await sendQuery(getSessionMessages(true)) // TODO: add throtting here and manage message history to stay within model context window limits
 
-    console.log('Model response:')
-    console.dir(response)
+    // TODO: Rework error handling
+    // if (!response) {
+    //     console.error('No response received from model.')
+    //     return {
+    //         role: 'assistant',
+    //         content: 'Sorry, I did not receive a response from the model.',
+    //         timestamp: new Date().toISOString(),
+    //         tokens: {
+    //             input: 0,
+    //             output: 0
+    //         },
+    //         cost: 0
+    //     }
+    // }
+
+
+
+    // console.log('Model response:')
+    // console.dir(response)
 
     // TODO should there be a retry mechanism here in case of no response or error from model?
     // if (!response || !response.content) {
@@ -202,15 +245,14 @@ function parseContent(content: ContentBlock[]): string {
 }
 
 function displayResponse(response: ResponseMessage) {
-    console.log('Claude says:')
+    // console.log('Claude says:')
     console.log(response.content)
     console.log('\n')
     console.log(
         // `Tokens: ${session.total_tokens.input} input, ${session.total_tokens.output} output | ` + 
-        `Tokens: ${response.tokens.input} input, ${response.tokens.output} output | ` + 
-        `Cost: $${response.cost.toFixed(6)} | Total: $${session.total_cost.toFixed(6)}`)
+        `[ Tokens: ${response.tokens.input} input, ${response.tokens.output} output | ` + 
+        `Cost: $${response.cost.toFixed(6)} | Total: $${session.total_cost.toFixed(6)} ]`)
 
-    console.log('\n')
 }
 
 function displaySessionCostAndUsage() {
@@ -218,7 +260,18 @@ function displaySessionCostAndUsage() {
     console.log(`Input tokens: ${session.total_tokens.input}`)
     console.log(`Output tokens: ${session.total_tokens.output}`)
     console.log(`Total cost: $${session.total_cost.toFixed(6)}`)
-    console.log('\n')
+}
+
+function displaySessionSummary() {
+    const summary = getSessionSummary()
+    console.log('Session Summary:')
+    console.log(`Session ID: ${summary.session_id}`)
+    console.log(`Model: ${summary.model}`)
+    console.log(`Started at: ${summary.started_at}`)
+    console.log(`Ended at: ${summary.ended_at || 'In progress'}`)
+    console.log(`Total messages: ${summary.total_messages}`)
+    console.log(`Total tokens: ${summary.total_tokens.input} input, ${summary.total_tokens.output} output`)
+    console.log(`Total cost: $${summary.total_cost.toFixed(6)}`)
 }
 
 function displayHelp() {
@@ -230,7 +283,6 @@ function displayHelp() {
     console.log('  /cost - Show current session cost and token usage')
     console.log('  /help - Show this help message')
     console.log('  /exit or /quit - End the session')
-    console.log('\n')
 }
 
 // function calculateCost(usage: { input_tokens: number, output_tokens: number }): number {
@@ -279,14 +331,16 @@ function setModelByType(modelType: string) {
     switch(modelType.split(' ')[1]) {
         case 'claude':
             setModel(ClaudeModel)
+            console.log(`Switched to model: ${ClaudeModel.name}`)
             break;
         case 'gpt':
             setModel(GptModel)
+            console.log(`Switched to model: ${GptModel.name}`)
             break;
         default:
-            console.error(`Unsupported model type specified: ${modelType}. \n' + 
-                'Supported types are: ${supportedModelTypes.join(', ')}. \n' + 
-                'No changes made.`)
+            console.error(`Unsupported model type specified: ${modelType}.  ` +
+                `Supported types are: ${supportedModelTypes.join(', ')}.  \n` +
+                `No changes made.`)
             break;
     }
 }
@@ -298,16 +352,18 @@ function saveSessionAsJson() {
         .then(fileHandle => {
             return fileHandle.writeFile(JSON.stringify(getSession(), null, 2))
                 .then(() => {
-                    console.log(`Session saved as ${filename}`)
+                    console.log(`Session saved as ${filename} \n`)
+                    console.log('\n')
                     return fileHandle.close()
                 })
                 .catch(err => {
-                    console.error('Error writing session to file:', err)
+                    console.error('Error writing session to file:', err, '\n')
+                    console.log('\n')
                     return fileHandle.close()
                 })
         })
         .catch(err => {
-            console.error('Error opening file for saving session:', err)
+            console.error('Error opening file for saving session:', err, '\n')
         })
 }
 
@@ -328,16 +384,14 @@ function exportSessionToMarkdown() {
         .then(fileHandle => {
             return fileHandle.writeFile(markdownContent)
                 .then(() => {
-                    console.log(`Session exported as ${filename}`)
-                    return fileHandle.close()
+                    console.log(`Session exported as ${filename} \n`)
                 })
                 .catch(err => {
-                    console.error('Error writing session to file:', err)
-                    return fileHandle.close()
+                    console.error('Error writing session to file:', err, '\n')
                 })
         })
         .catch(err => {
-            console.error('Error opening file for exporting session:', err)
+            console.error('Error opening file for exporting session:', err, '\n')
         })
 }
 
@@ -399,8 +453,9 @@ function endSession() {
     // console.dir(getSessionMessages())
     // console.log('\n' + 'Session summary:' + '\n')
     // console.dir(getSessionSummary())
-    console.log('Session data:') // for debugging
-    console.dir(getSession())
+    // console.log('Session data:') // for debugging
+    // console.dir(getSession())
+    displaySessionSummary()
     console.log('\n')
     
     closeInterface()
@@ -416,15 +471,57 @@ import type { ContentBlock } from '@anthropic-ai/sdk/resources/messages/messages
 async function sendQuery(query: MessageHistory[]) {
     const anthropic = new Anthropic();
 
-    const message = await anthropic.messages.create({
-        model: ClaudeModel.name,
-        max_tokens: 1024,
-        // messages: [{ role: "user", content: query }]
-        messages: query
-    });
+    //try {
+        const message = await anthropic.messages.create({
+            model: ClaudeModel.name,
+            max_tokens: 1024,
+            // messages: [{ role: "user", content: query }]
+            messages: query
+        });
 
-    return message
+        return message
+
+    //} catch (error) {
+    //    console.error('Error sending query:', error)
+    //}
+
 }
+
+/*
+
+file:///Users/chrisl/Library/Mobile%20Documents/com~apple~CloudDocs/Development/AI/BootCamp/chatbotjs/node_modules/@anthropic-ai/sdk/core/error.mjs:55
+            return new RateLimitError(status, error, message, headers);
+                   ^
+
+RateLimitError: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Number of concurrent connections has exceeded your rate limit. Please try again later or contact sales at https://www.anthropic.com/contact-sales to discuss your options for a rate limit increase."},"request_id":"req_011CYxCD2ZR4zxLEXUyPkjj7"}
+    at APIError.generate (file:///Users/chrisl/Library/Mobile%20Documents/com~apple~CloudDocs/Development/AI/BootCamp/chatbotjs/node_modules/@anthropic-ai/sdk/core/error.mjs:55:20)
+    at Anthropic.makeStatusError (file:///Users/chrisl/Library/Mobile%20Documents/com~apple~CloudDocs/Development/AI/BootCamp/chatbotjs/node_modules/@anthropic-ai/sdk/client.mjs:155:32)
+    at Anthropic.makeRequest (file:///Users/chrisl/Library/Mobile%20Documents/com~apple~CloudDocs/Development/AI/BootCamp/chatbotjs/node_modules/@anthropic-ai/sdk/client.mjs:309:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async sendQuery (file:///Users/chrisl/Library/Mobile%20Documents/com~apple~CloudDocs/Development/AI/BootCamp/chatbotjs/dist/index.js:376:21)
+    at async processQuery (file:///Users/chrisl/Library/Mobile%20Documents/com~apple~CloudDocs/Development/AI/BootCamp/chatbotjs/dist/index.js:137:20)
+    at async routeQuery (file:///Users/chrisl/Library/Mobile%20Documents/com~apple~CloudDocs/Development/AI/BootCamp/chatbotjs/dist/index.js:121:20)
+    at async Interface.processUserInput (file:///Users/chrisl/Library/Mobile%20Documents/com~apple~CloudDocs/Development/AI/BootCamp/chatbotjs/dist/index.js:113:13) {
+  status: 429,
+  headers: Headers {},
+  requestID: 'req_011CYxCD2ZR4zxLEXUyPkjj7',
+  error: {
+    type: 'error',
+    error: {
+      type: 'rate_limit_error',
+      message: 'Number of concurrent connections has exceeded your rate limit. Please try again later or contact sales at https://www.anthropic.com/contact-sales to discuss your options for a rate limit increase.'
+    },
+    request_id: 'req_011CYxCD2ZR4zxLEXUyPkjj7'
+  }
+}
+
+
+*/
+
+
+
+
+
 
 /*
 API response:

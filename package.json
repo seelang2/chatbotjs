@@ -1,15 +1,16 @@
 {
   "name": "chatbotjs",
   "version": "1.0.0",
-  "description": "",
+  "description": "CLI chatbot using OpenAI and Anthropic APIs",
   "main": "index.js",
   "build": "tsc",
   "scripts": {
     "build": "tsc",
+    "start": "node dist/index.js --verbose",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "Chris Langtiw",
   "license": "ISC",
   "type": "module",
   "devDependencies": {

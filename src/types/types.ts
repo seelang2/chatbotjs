@@ -57,9 +57,11 @@ type ModelType = "claude" | "gpt"
 interface Model {
     name: string,
     type: ModelType,
-    inputCostPerCS: number,
-    outputCostPerCS: number,
-    costScale: number
+    inputCostPerCS: number,             // USD cost per cost scale for input tokens, adjust based on actual pricing
+    outputCostPerCS: number,            // USD cost per cost scale for output tokens, adjust based on actual pricing
+    costScale: number,                  // multiplier to convert token counts to cost (e.g. 1000 for per-1k pricing)
+    windowSize: number,                 // context window size in tokens
+    windowReservePercentage: number     // percentage of window to reserve as buffer to avoid hitting limits
 }
 
 interface Conversation {
