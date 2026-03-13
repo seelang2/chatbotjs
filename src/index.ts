@@ -115,10 +115,10 @@ async function processUserInput(query: string) {
             clearSessionMessages()
             break;
         case query === '/save': // save session as JSON file
-            saveSessionAsJson();
+            await saveSessionAsJson();
             break;
         case query === '/export': // export to markdown
-            exportSessionToMarkdown();
+            await exportSessionToMarkdown();
             break;
         case query === '/cost': // show current session cost and token usage
             displaySessionCostAndUsage()
@@ -346,28 +346,37 @@ function setModelByType(modelType: string) {
 }
 
 
-function saveSessionAsJson() {
+async function saveSessionAsJson() {
     const filename = `session-${session.session_id}.json`
-    open(filename, 'w')
-        .then(fileHandle => {
-            return fileHandle.writeFile(JSON.stringify(getSession(), null, 2))
-                .then(() => {
-                    console.log(`Session saved as ${filename} \n`)
-                    console.log('\n')
-                    return fileHandle.close()
-                })
-                .catch(err => {
-                    console.error('Error writing session to file:', err, '\n')
-                    console.log('\n')
-                    return fileHandle.close()
-                })
-        })
-        .catch(err => {
-            console.error('Error opening file for saving session:', err, '\n')
-        })
+    // open(filename, 'w')
+    //     .then(fileHandle => {
+    //         return fileHandle.writeFile(JSON.stringify(getSession(), null, 2))
+    //             .then(() => {
+    //                 console.log(`Session saved as ${filename} \n`)
+    //                 console.log('\n')
+    //                 return fileHandle.close()
+    //             })
+    //             .catch(err => {
+    //                 console.error('Error writing session to file:', err, '\n')
+    //                 console.log('\n')
+    //                 return fileHandle.close()
+    //             })
+    //     })
+    //     .catch(err => {
+    //         console.error('Error opening file for saving session:', err, '\n')
+    //     })
+    const fileHandle = await open(filename, 'w')
+    try {
+        await fileHandle.writeFile(JSON.stringify(getSession(), null, 2))
+        console.log(`Session saved as ${filename}`)
+    } catch (err) {
+        console.error('Error writing session to file:', err)
+    } finally {
+        await fileHandle.close()
+    }
 }
 
-function exportSessionToMarkdown() {
+async function exportSessionToMarkdown() {
     const filename = `session-${session.session_id}.md`
     let markdownContent = `# Chat Session ${session.session_id}\n\n`
     markdownContent += `**Model:** ${session.model}\n\n`
@@ -380,19 +389,28 @@ function exportSessionToMarkdown() {
         markdownContent += `${msg.content}\n\n`
     })
 
-    open(filename, 'w')
-        .then(fileHandle => {
-            return fileHandle.writeFile(markdownContent)
-                .then(() => {
-                    console.log(`Session exported as ${filename} \n`)
-                })
-                .catch(err => {
-                    console.error('Error writing session to file:', err, '\n')
-                })
-        })
-        .catch(err => {
-            console.error('Error opening file for exporting session:', err, '\n')
-        })
+    // open(filename, 'w')
+    //     .then(fileHandle => {
+    //         return fileHandle.writeFile(markdownContent)
+    //             .then(() => {
+    //                 console.log(`Session exported as ${filename}`)
+    //             })
+    //             .catch(err => {
+    //                 console.error('Error writing session to file:', err)
+    //             })
+    //     })
+    //     .catch(err => {
+    //         console.error('Error opening file for exporting session:', err)
+    //     })
+    const fileHandle = await open(filename, 'w')
+    try {
+        await fileHandle.writeFile(markdownContent)
+        console.log(`Session exported as ${filename}`)
+    } catch (err) {
+        console.error('Error writing session to file:', err)
+    } finally {
+        await fileHandle.close()
+    }
 }
 
 function resetSession() {
