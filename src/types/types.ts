@@ -8,6 +8,23 @@
 //     content: Array<{ type: string, text: string }>
 // }
 
+interface Client {
+    model: Model,
+    sendQuery: (query: MessageHistory[]) => Promise<ResponseMessage>,
+    getModel: () => Model
+}
+
+interface ChatClient extends Client {
+    setModel: (modelType: string)=> string
+}
+
+interface SdkClient<TResponse, TContent> extends Client {
+    sdk: unknown,
+    mapResponseToMessage: (response: TResponse) => unknown,
+    getModelDataFromEnv: () => Model,
+    parseContent(content: TContent): unknown
+}
+
 interface Message {
     role: 'user' | 'assistant',
     content: string,
@@ -17,6 +34,39 @@ interface Message {
 interface ResponseMessage extends Message {
     tokens: Token,
     cost: number
+}
+
+interface ApiResponse {
+    id: string,
+    usage: {
+        input_tokens: number,
+        output_tokens: number
+    }
+}
+
+// Only defining text ContextBlock for now
+type AnthropicTextContent = {
+    type: 'text',
+    text: string
+}
+
+interface AnthropicResponse extends ApiResponse {
+    content: AnthropicTextContent[] 
+}
+
+type GptTextContent = {
+    type: 'output_text',
+    text: string
+}
+
+type GptOutput = {
+    content: GptTextContent[],
+    type: string
+}
+
+interface GptResponse extends ApiResponse {
+    output: GptOutput[],
+    output_text: string
 }
 
 type MessageHistory = {
@@ -85,6 +135,14 @@ interface CostCalculation {
 
 
 export type { 
+    Client,
+    ChatClient,
+    SdkClient,
+    AnthropicResponse,
+    AnthropicTextContent,
+    GptResponse,
+    GptOutput,
+    GptTextContent,
     Message, 
     ResponseMessage, 
     MessageHistory, 
