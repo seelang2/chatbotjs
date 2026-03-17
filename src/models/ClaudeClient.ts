@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 //import type { ContentBlock, Message } from '@anthropic-ai/sdk/resources/messages/messages.js';
 
 import 'dotenv/config'
-import { calculateMessageCost } from '../utils/costCalculator.js';
+import { calculateMessageCost } from '../utils/helpers.js';
 
 
 // const ClaudeModel: Model = {

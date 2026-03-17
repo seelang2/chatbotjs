@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import OpenAI from "openai";
 import type { Message, ResponseMessage, Model, SdkClient, GptResponse, GptOutput, GptTextContent } from '../types/types.js'
-import { calculateMessageCost } from '../utils/costCalculator.js';
+import { calculateMessageCost } from '../utils/helpers.js';
 
 
 // const GptModel: Model = {

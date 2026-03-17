@@ -1,10 +1,10 @@
-import type { UserMessage, ResponseMessage, ChatClient, ModelType, Conversation } from '../types/types.js'
+import type { Conversation, Message, UserMessage, ResponseMessage, ChatClient, ModelType } from '../types/types.js'
 import readline from 'node:readline';
 import { ChatSession } from './ChatSession.js'
 import { ModelClient } from './ModelClient.js'
 import { saveSessionAsJson, exportSessionToMarkdown } from '../utils/fileExporter.js'
 import { Ansi } from '../utils/TextColor.js';
-import { maxHeaderSize } from 'node:http';
+import { countTokens } from '../utils/helpers.js';
 
 export default class ChatManager {
 
@@ -159,7 +159,7 @@ export default class ChatManager {
             specified by Model.windowSize and Model.windowReservePercentage respectively.
         */
 
-        //const context = this.getContext()
+        const context = this.getContext()
 
         
 
@@ -185,7 +185,8 @@ export default class ChatManager {
 
         // send query to model and get response
         // TODO: add throtting here and manage message history to stay within model context window limits
-        let responseMessage = await this.client.sendQuery(this.session.getMessages(true)) 
+        //let responseMessage = await this.client.sendQuery(this.session.getMessages(true)) 
+        let responseMessage = await this.client.sendQuery(context) 
         
         // TODO: Rework error handling
 
@@ -202,7 +203,48 @@ export default class ChatManager {
 
     }
 
-    getContext = () => {}
+    getContext = (): Message[] => {
+        // get DEEP COPY of messages
+        
+        // ...existing code...
+        //var context = this.session.getMessages().filter((x): x is Message => x !== undefined).map((x) => x);
+        // ...existing code...
+        
+        var context = this.session.getMessages().map((x) => x)
+        console.log('getContext: context:'); console.dir(context, {depth: 3})
+        
+        // get context window info
+        const info = this.getUserWindowInfo()
+        // if context < maxcontent
+        if (info.currentUserContextSize < info.maxUserContextSize) {
+            // map messages to Message
+            const val = context.map((msg) => { return { role: msg.role, content: msg.content } })
+            // return remapped messages
+            return val
+        } else { // else
+            // prune oldest messages until context < maxcontent:
+            // working backwards from most recent
+                // if totalcounter + currentitemtotal > maxcontent
+                    // split array
+                    // display verbose info about post-split items
+                    // pre-split items
+            let totalTokens = 0
+            for (let i = context.length - 1; i >= 0; i--) {
+                // const msgTokens = countTokens(context[i])
+                const msg = context[i]
+                if (!msg) {
+                    continue
+                }
+                const msgTokens = countTokens(msg)
+                totalTokens += msgTokens
+            }
+        }
+
+
+
+        
+        return []
+    }
 
     getUserWindowInfo = () => {
         const userContextWindow = this.client.getUserContextWindowSize()
@@ -222,7 +264,7 @@ export default class ChatManager {
 
     userContextLimitReached = ():boolean => {
         const info = this.getUserWindowInfo()
-        return info.currentUserContextSize > maxHeaderSize
+        return info.currentUserContextSize > info.maxUserContextSize
     }
 
     checkContentWindowLimit = () => {
