@@ -1,6 +1,6 @@
-import type { MessageHistory, ResponseMessage, Model, SdkClient, AnthropicResponse, AnthropicTextContent } from '../types/types.js'
+import type { Message, ResponseMessage, Model, SdkClient, AnthropicResponse, AnthropicTextContent } from '../types/types.js'
 import Anthropic from "@anthropic-ai/sdk";
-import type { ContentBlock, Message } from '@anthropic-ai/sdk/resources/messages/messages.js';
+//import type { ContentBlock, Message } from '@anthropic-ai/sdk/resources/messages/messages.js';
 
 import 'dotenv/config'
 import { calculateMessageCost } from '../utils/costCalculator.js';
@@ -53,7 +53,7 @@ export class ClaudeClient implements SdkClient<AnthropicResponse, AnthropicTextC
             outputCostPerCS: 5, 
             costScale: 1000000, 
             windowSize: 200000,
-            windowReservePercentage: 0.3
+            windowReservePercentage: 0.975 // 0.3 in normal mode; 0.975 (5000 user tokens for 200K limit) for window testing
         }
     }
 
@@ -61,7 +61,7 @@ export class ClaudeClient implements SdkClient<AnthropicResponse, AnthropicTextC
         return this.model;
     }
 
-    async sendQuery(query: MessageHistory[]): Promise<ResponseMessage> {
+    async sendQuery(query: Message[]): Promise<ResponseMessage> {
 
         const response = await this.sdk.messages.create({
             model: this.model.name,

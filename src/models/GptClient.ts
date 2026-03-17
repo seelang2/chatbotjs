@@ -1,7 +1,6 @@
 import 'dotenv/config'
 import OpenAI from "openai";
-
-import type { MessageHistory, ResponseMessage, Model, SdkClient, GptResponse, GptOutput, GptTextContent } from '../types/types.js'
+import type { Message, ResponseMessage, Model, SdkClient, GptResponse, GptOutput, GptTextContent } from '../types/types.js'
 import { calculateMessageCost } from '../utils/costCalculator.js';
 
 
@@ -53,7 +52,7 @@ export class GptClient implements SdkClient<GptResponse, GptResponse> {
         return this.model;
     }
    
-    async sendQuery(query: MessageHistory[]): Promise<ResponseMessage> {
+    async sendQuery(query: Message[]): Promise<ResponseMessage> {
 
         const response = await this.sdk.responses.create({
             model: this.model.name,

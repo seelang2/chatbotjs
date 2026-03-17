@@ -1,21 +1,14 @@
 
-// interface Message {
-//     model: string,
-//     id: string,
-//     timestamp: string,
-//     type: string,
-//     role: string,
-//     content: Array<{ type: string, text: string }>
-// }
 
 interface Client {
     model: Model,
-    sendQuery: (query: MessageHistory[]) => Promise<ResponseMessage>,
+    sendQuery: (query: Message[]) => Promise<ResponseMessage>,
     getModel: () => Model
 }
 
 interface ChatClient extends Client {
     setModel: (modelType: string)=> string
+    getUserContextWindowSize: () => number
 }
 
 interface SdkClient<TResponse, TContent> extends Client {
@@ -23,25 +16,6 @@ interface SdkClient<TResponse, TContent> extends Client {
     mapResponseToMessage: (response: TResponse) => unknown,
     getModelDataFromEnv: () => Model,
     parseContent(content: TContent): unknown
-}
-
-interface Message {
-    role: 'user' | 'assistant',
-    content: string,
-    timestamp: string
-}
-
-interface ResponseMessage extends Message {
-    tokens: Token,
-    cost: number
-}
-
-interface ApiResponse {
-    id: string,
-    usage: {
-        input_tokens: number,
-        output_tokens: number
-    }
 }
 
 // Only defining text ContextBlock for now
@@ -69,9 +43,28 @@ interface GptResponse extends ApiResponse {
     output_text: string
 }
 
-type MessageHistory = {
-    role: 'user' | 'assistant',
+type Role = 'user' | 'assistant'
+
+type Message = {
+    role: Role,
     content: string,
+}
+
+interface UserMessage extends Message {
+    timestamp: string
+}
+
+interface ResponseMessage extends UserMessage {
+    tokens: Token,
+    cost: number
+}
+
+interface ApiResponse {
+    id: string,
+    usage: {
+        input_tokens: number,
+        output_tokens: number
+    }
 }
 
 type Token = {
@@ -79,29 +72,6 @@ type Token = {
     output: number
 }
 
-// interface TokenUsage extends Token {
-//     cost: number
-// }
-
-/*
-More interesting suggestions
-type TokenUsage = {
-    input_tokens: number,
-    cache_creation_input_tokens: number,
-    cache_read_input_tokens: number,
-    cache_creation: {
-        ephemeral_5m_input_tokens: number,
-        ephemeral_1h_input_tokens: number
-    },
-    output_tokens: number
-}
-
-type TokenCost = {
-    inputCostPer1k: number,
-    outputCostPer1k: number
-}
-
-*/
 type ModelType = "claude" | "gpt"
 
 interface Model {
@@ -111,7 +81,7 @@ interface Model {
     outputCostPerCS: number,            // USD cost per cost scale for output tokens, adjust based on actual pricing
     costScale: number,                  // multiplier to convert token counts to cost (e.g. 1000 for per-1k pricing)
     windowSize: number,                 // context window size in tokens
-    windowReservePercentage: number     // percentage of window to reserve as buffer to avoid hitting limits
+    windowReservePercentage: number     // decimal percentage of window to reserve for output to avoid hitting limits
 }
 
 interface Conversation {
@@ -119,7 +89,7 @@ interface Conversation {
     started_at: string,
     ended_at: string | null,
     model: string,
-    messages: Message[],
+    messages: UserMessage[],
     total_cost: number,
     total_tokens: Token
 }
@@ -133,7 +103,6 @@ interface CostCalculation {
   totalCost: number;
 }
 
-
 export type { 
     Client,
     ChatClient,
@@ -144,8 +113,8 @@ export type {
     GptOutput,
     GptTextContent,
     Message, 
+    UserMessage, 
     ResponseMessage, 
-    MessageHistory, 
     Model, 
     ModelType, 
     Conversation, 

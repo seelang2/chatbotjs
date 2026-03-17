@@ -1,5 +1,5 @@
 
-import type { Client, ChatClient, MessageHistory, ResponseMessage, Model, ModelType } from '../types/types.js'
+import type { Client, ChatClient, Message, ResponseMessage, Model, ModelType } from '../types/types.js'
 import { ClaudeClient } from '../models/ClaudeClient.js'
 import { GptClient } from '../models/GptClient.js'
 
@@ -46,7 +46,7 @@ export class ModelClient implements ChatClient {
         return this.client.getModel()
     }
 
-    async sendQuery(query: MessageHistory[]): Promise<ResponseMessage> {
+    async sendQuery(query: Message[]): Promise<ResponseMessage> {
         // This will call the sendQuery function of the specific model client instance (e.g. ClaudeClient, GptClient) to send the query and get the response
         if (!this.client || typeof this.client.sendQuery !== 'function') {
             throw new Error('Model client is not set or does not have a sendQuery method')
@@ -54,6 +54,10 @@ export class ModelClient implements ChatClient {
 
         const response = await this.client.sendQuery(query)
         return response
+    }
+
+    getUserContextWindowSize = () => {
+        return this.model.windowSize * (1 - this.model.windowReservePercentage)
     }
 
 }

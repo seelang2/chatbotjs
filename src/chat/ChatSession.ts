@@ -1,4 +1,4 @@
-import type { Conversation, Message, MessageHistory, ResponseMessage, Model, ModelType, Token } from '../types/types.js'
+import type { Conversation, UserMessage, Message, ResponseMessage, Model, ModelType, Token } from '../types/types.js'
 
 
 export class ChatSession {
@@ -46,11 +46,11 @@ export class ChatSession {
         return oldSession
     }
 
-    addMessage = (message: Message) => {
-        this.session.messages.push(message)
+    addMessage = (message: UserMessage) => {
+        this.session.messages.push(message) // Note: Anthropic has a limit of 100000 messages
     }
 
-    getMessages = (useShortForm: boolean = false): MessageHistory[] => {
+    getMessages = (useShortForm: boolean = false): Message[] => {
         return this.session.messages.map(msg => (useShortForm ? { role: msg.role, content: msg.content } : msg))
     }
 
@@ -67,6 +67,40 @@ export class ChatSession {
         this.session.total_tokens.input += data.input_tokens
         this.session.total_tokens.output += data.output_tokens
         this.session.total_cost += data.cost
+    }
+
+    getContextWindowSize = (altMessages?: Message[]): Token => {
+        //console.log(`getContextWindowSize called. message length: ${this.session.messages.length}`)
+        if (this.session.messages.length < 1) return { input: 0, output: 0 }
+        //let passes = 0
+        let contextTokens = this.session.messages.reduce(
+            (total, message) => { 
+                //console.log(`Reducing messages. Pass ${++passes}`)
+                // Casting to ResponseMessage so TS recognizes token property
+                let t = total as ResponseMessage, m = message as ResponseMessage
+                
+                // Assign the tokens field if missing from either t or m
+                if (typeof t.tokens === 'undefined') t.tokens = { input: 0, output: 0 }
+                if (typeof m.tokens === 'undefined') m.tokens = { input: 0, output: 0 }
+                //console.log('Current total t:'); console.dir(t)
+                t.tokens.input += m.tokens.input
+                t.tokens.output += m.tokens.output
+                // console.log('m to add to current total:'); console.dir(m)
+                // console.log('New total t:'); console.dir(t)
+                return t
+            },
+            {
+                role: 'user',
+                content: 'NOT PART OF THE MESSAGE QUEUE - This is an initialization value placed by Session.getContextWindowSize',
+                timestamp: '',
+                tokens: { input: 0, output: 0 }
+            } as ResponseMessage
+        ) as ResponseMessage
+
+        //console.log('Finished reducing messages. contextTokens:'); console.dir(contextTokens)
+        if (typeof contextTokens.tokens === 'undefined') contextTokens.tokens = { input: 0, output: 0 }
+
+        return contextTokens.tokens
     }
 
     getSummary = () => {

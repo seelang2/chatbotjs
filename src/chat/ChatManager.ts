@@ -1,14 +1,20 @@
-import type { Conversation, Message, MessageHistory, ResponseMessage, ChatClient, Model, ModelType, Token, Client } from '../types/types.js'
+import type { UserMessage, ResponseMessage, ChatClient, ModelType, Conversation } from '../types/types.js'
 import readline from 'node:readline';
 import { ChatSession } from './ChatSession.js'
 import { ModelClient } from './ModelClient.js'
 import { saveSessionAsJson, exportSessionToMarkdown } from '../utils/fileExporter.js'
+import { Ansi } from '../utils/TextColor.js';
+import { maxHeaderSize } from 'node:http';
 
 export default class ChatManager {
 
-    // AI model configuration
     supportedModelTypes: ModelType[] = ['claude', 'gpt']
+    streaming: boolean
+    verbose: boolean
 
+    // User context window threshold to warn users they are nearing limit (percent)
+    contextWindowWarningThreshold = 80 // TODO: Maybe move this to .env instead of hardcoded
+    
     session: ChatSession
     rl = readline.createInterface({
         input: process.stdin,
@@ -17,16 +23,16 @@ export default class ChatManager {
     })
     client: ChatClient
 
-    constructor(modelType: string) {
+    constructor(modelType: string, streaming: boolean = false, verbose: boolean = false) {
+        this.streaming = streaming
+        this.verbose = verbose
         this.session = new ChatSession()
-
         this.client = new ModelClient(modelType)
         this.session.setModelName(this.client.getModel().name)
 
     }
 
     start = () => {
-
         this.rl.on('line', this.processUserInput)
 
         let sessionId = this.session.getId()
@@ -95,7 +101,7 @@ export default class ChatManager {
     }
 
     end = () => {
-        this.displayChatSummary()
+        this.displayChatSummary(this.session.end())
         console.log('\n')
         
         this.closeInterface()
@@ -134,13 +140,12 @@ export default class ChatManager {
     handleQuery = async (query: string) => {
         let response: ResponseMessage = await this.processQuery(query);
         this.displayResponse(response)
+        this.checkContentWindowLimit()
     }
 
     processQuery = async (query: string) => {
-        // console.log(`You asked: ${query}`);
-
         // update session with user message
-        const userMessage: Message = {
+        const userMessage: UserMessage = {
             role: 'user',
             content: query,
             timestamp: new Date().toISOString()
@@ -148,7 +153,35 @@ export default class ChatManager {
         this.session.addMessage(userMessage)
 
         // TODO: add sliding context window management here.
+        /*
+            Sliding context window adjusts the context size being sent to the API by
+            omitting the earliest messages so the input tokens is under the limit 
+            specified by Model.windowSize and Model.windowReservePercentage respectively.
+        */
+
+        //const context = this.getContext()
+
         
+
+        // the check here is to prune context
+
+        if (this.verbose) {
+            // console.log('contextWindowSize')
+            // console.dir(contextWindowSize)
+            // console.log(`Current window size: ${contextWindowSize.input + contextWindowSize.output} `+
+            //     `(${contextWindowSize.input} input, ${contextWindowSize.output} output)`)
+            
+            
+        }
+
+        
+
+        if (this.verbose) {
+            // console.log(`You asked: ${query}`);
+            console.log(Ansi.grey + 'Active message chain:' + Ansi.reset)
+            console.dir(this.session.getMessages(true))
+            console.log('\n')
+        }
 
         // send query to model and get response
         // TODO: add throtting here and manage message history to stay within model context window limits
@@ -158,10 +191,6 @@ export default class ChatManager {
 
         // update session with model response, tokens, and cost
         this.session.addResponseMessage(responseMessage)
-
-        // this.session.total_tokens.input += message.tokens.input
-        // this.session.total_tokens.output += message.tokens.output
-        // this.session.total_cost += message.cost
 
         this.session.updateTotals({ 
             cost: responseMessage.cost, 
@@ -173,15 +202,57 @@ export default class ChatManager {
 
     }
 
+    getContext = () => {}
+
+    getUserWindowInfo = () => {
+        const userContextWindow = this.client.getUserContextWindowSize()
+        const contextWindowSize = this.session.getContextWindowSize()
+        const totalUserContextTokens = contextWindowSize.input + contextWindowSize.output
+
+        return {
+            maxUserContextSize: userContextWindow,
+            currentUserContextSize: totalUserContextTokens,
+            userContextUsagePercent: (totalUserContextTokens / userContextWindow) * 100
+        }
+    }
+
+    warnContextLimitNear = ():boolean => {
+        return this.getUserWindowInfo().userContextUsagePercent > this.contextWindowWarningThreshold
+    }
+
+    userContextLimitReached = ():boolean => {
+        const info = this.getUserWindowInfo()
+        return info.currentUserContextSize > maxHeaderSize
+    }
+
+    checkContentWindowLimit = () => {
+        const info = this.getUserWindowInfo()
+        if (this.warnContextLimitNear()) {
+            console.log(
+                `WARNING: ` + 
+                `You are nearing the context window limit. If the limit is reached, older messages ` +
+                `will be removed from the context queue and may affect conversation quality. `
+            ) 
+            if (this.verbose) {
+                console.log(
+                    `${info.userContextUsagePercent}% (${info.currentUserContextSize}) of ` + 
+                    `${info.maxUserContextSize} tokens used.`
+                )
+            }
+        }
+    }
+
     displayResponse = (response: ResponseMessage) => {
-        // console.log('Claude says:')
         const summary = this.session.getSummary()
         console.log(response.content)
         console.log('\n')
-        console.log(
-            // `Tokens: ${session.total_tokens.input} input, ${session.total_tokens.output} output | ` + 
-            `[ Tokens: ${response.tokens.input} input, ${response.tokens.output} output | ` + 
-            `Cost: $${response.cost.toFixed(6)} | Total: $${summary.total_cost.toFixed(6)} ]`)
+
+        if (this.verbose) {
+            console.log(Ansi.grey +
+                `[ Tokens: ${response.tokens.input} input, ${response.tokens.output} output | ` + 
+                `Cost: $${response.cost.toFixed(6)} | Total: $${summary.total_cost.toFixed(6)} ]`
+                + Ansi.reset)
+        }
 
     }
 
@@ -193,16 +264,24 @@ export default class ChatManager {
         console.log(`Total cost: $${summary.total_cost.toFixed(6)}`)
     }
 
-    displayChatSummary = () => {
-        const summary = this.session.getSummary()
+    displayChatSummary = (session: Conversation) => {
+
+        if (this.verbose) {
+            console.log(Ansi.grey + 'Session dump:' + Ansi.reset)
+            console.dir(session)
+        }
+
+        //const summary = this.session.getSummary()
         console.log('Session Summary:')
-        console.log(`Session ID: ${summary.session_id}`)
-        console.log(`Model: ${summary.model}`)
-        console.log(`Started at: ${summary.started_at}`)
-        console.log(`Ended at: ${summary.ended_at || 'In progress'}`)
-        console.log(`Total messages: ${summary.total_messages}`)
-        console.log(`Total tokens: ${summary.total_tokens.input} input, ${summary.total_tokens.output} output`)
-        console.log(`Total cost: $${summary.total_cost.toFixed(6)}`)
+        console.log(`Session ID: ${session.session_id}`)
+        console.log(`Model: ${session.model}`)
+        console.log(`Started at: ${session.started_at}`)
+        console.log(`Ended at: ${session.ended_at || 'In progress'}`)
+        console.log(`Total messages: ${session.messages.length}`)
+        console.log(`Total tokens: ${session.total_tokens.input} input, ` +
+            `${session.total_tokens.output} output, ` + 
+            `${session.total_tokens.input + session.total_tokens.output} total`)
+        console.log(`Total cost: $${session.total_cost.toFixed(6)}`)
     }
 
 
