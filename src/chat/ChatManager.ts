@@ -226,7 +226,7 @@ export default class ChatManager {
     }
 
     processStreamQuery = async () => {
-        //
+        console.log('We be streaming!')
     }
 
     getContext = (): Message[] => {
@@ -300,9 +300,9 @@ export default class ChatManager {
         }
     }
 
-    warnContextLimitNear = ():boolean => {
-        return this.getUserWindowInfo().userContextUsagePercent > this.contextWindowWarningThreshold
-    }
+    // warnContextLimitNear = ():boolean => {
+    //     return this.getUserWindowInfo().userContextUsagePercent > this.contextWindowWarningThreshold
+    // }
 
     userContextLimitReached = ():boolean => {
         const info = this.getUserWindowInfo()
@@ -312,7 +312,7 @@ export default class ChatManager {
     checkContentWindowLimit = () => {
         const info = this.getUserWindowInfo()
         const overLimit = info.currentUserContextSize < info.maxUserContextSize ? false : true
-        if (this.warnContextLimitNear()) {
+        if (info.userContextUsagePercent > this.contextWindowWarningThreshold) {
             console.log(
                 `WARNING: ` + 
                 `You ${overLimit ? 'have exceeded' : 'are nearing'} ` + 
