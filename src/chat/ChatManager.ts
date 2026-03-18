@@ -82,7 +82,7 @@ export default class ChatManager {
                 this.setVerbose(query)
                 break;
             case query === '/clear': // reset session message history
-                this.session.clearMessages()
+                this.clear()
                 break;
             case query === '/save': // save session as JSON file
                 await saveSessionAsJson(this.session.getId(), this.session.get());
@@ -140,7 +140,13 @@ export default class ChatManager {
 
     reset = () => {
         const oldSession = this.session.reset()
+        this.contextWindowStartIndex = 0
         console.log(`Session has been reset. New session id: ${this.session.getId()}`)
+    }
+
+    clear = () => {
+        this.session.clearMessages()
+        this.contextWindowStartIndex = 0
     }
 
     setDebug = (query: string) => {
@@ -198,8 +204,8 @@ export default class ChatManager {
         console.log('  /save - Save session as JSON file')
         console.log('  /export - Export to markdown')
         console.log('  /cost - Show current session cost and token usage')
-        console.log('  /context - Show current context window')
-        console.log('  /history - Show all messages')
+        console.log('  /context - Show messages in the current context window')
+        console.log('  /history - Show all messages in session history')
         console.log('  /reset - Reset session')
         console.log('  /help - Show this help message')
         console.log('  /exit or /quit - End the session')
