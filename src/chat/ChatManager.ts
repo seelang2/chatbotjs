@@ -11,6 +11,7 @@ export default class ChatManager {
     supportedModelTypes: ModelType[] = ['claude', 'gpt']
     streaming: boolean
     verbose: boolean
+    contextWindowStartIndex = 0
 
     // User context window threshold to warn users they are nearing limit (percent)
     contextWindowWarningThreshold = 80 // TODO: Maybe move this to .env instead of hardcoded
@@ -26,7 +27,7 @@ export default class ChatManager {
     constructor(modelType: string, streaming: boolean = false, verbose: boolean = false) {
         this.streaming = streaming
         this.verbose = verbose
-        this.session = new ChatSession()
+        this.session = new ChatSession(this.verbose)
         this.client = new ModelClient(modelType)
         this.session.setModelName(this.client.getModel().name)
 
@@ -163,7 +164,6 @@ export default class ChatManager {
 
         
 
-        // the check here is to prune context
 
         if (this.verbose) {
             // console.log('contextWindowSize')
@@ -179,7 +179,8 @@ export default class ChatManager {
         if (this.verbose) {
             // console.log(`You asked: ${query}`);
             console.log(Ansi.grey + 'Active message chain:' + Ansi.reset)
-            console.dir(this.session.getMessages(true))
+            // console.dir(this.session.getMessages(true))
+            console.dir(context)
             console.log('\n')
         }
 
@@ -204,24 +205,34 @@ export default class ChatManager {
     }
 
     getContext = (): Message[] => {
-        // get DEEP COPY of messages
+        // get DEEP COPY of messages (don't affect original)
         
         // ...existing code...
         //var context = this.session.getMessages().filter((x): x is Message => x !== undefined).map((x) => x);
         // ...existing code...
         
-        var context = this.session.getMessages().map((x) => x)
-        console.log('getContext: context:'); console.dir(context, {depth: 3})
+        // var context = this.session.getMessages().map((x) => x)
+        const messages = this.session.getMessages()
+        if (this.verbose) { 
+            console.log(`getContext: messages: `); 
+            console.dir(messages, {depth: 3}); 
+            console.log(`Total messages: ${messages.length}`) 
+        }
         
         // get context window info
         const info = this.getUserWindowInfo()
         // if context < maxcontent
         if (info.currentUserContextSize < info.maxUserContextSize) {
             // map messages to Message
-            const val = context.map((msg) => { return { role: msg.role, content: msg.content } })
+            const context = messages.map((msg) => { return { role: msg.role, content: msg.content } })
             // return remapped messages
-            return val
+            return context
         } else { // else
+            console.log(
+                `getContext: user context window size exceeded ` + 
+                `(${info.currentUserContextSize} of ${info.maxUserContextSize} tokens used.)`
+            )
+
             // prune oldest messages until context < maxcontent:
             // working backwards from most recent
                 // if totalcounter + currentitemtotal > maxcontent
@@ -229,26 +240,38 @@ export default class ChatManager {
                     // display verbose info about post-split items
                     // pre-split items
             let totalTokens = 0
-            for (let i = context.length - 1; i >= 0; i--) {
-                // const msgTokens = countTokens(context[i])
-                const msg = context[i]
-                if (!msg) {
-                    continue
-                }
+            let context = []
+
+            for (let i = messages.length - 1; i >= 0; i--) {
+                const msg = messages[i]
+                if (!msg) { continue }
                 const msgTokens = countTokens(msg)
+                if (totalTokens + msgTokens >= info.maxUserContextSize) {
+                    this.contextWindowStartIndex = i + 1 // include current item
+                    break
+                }
                 totalTokens += msgTokens
+                context.unshift(msg) // add to front as we're moving backwards
+
             }
+
+            if (this.verbose) {
+                // display info about items dropped
+                console.log(`Older messages will be pruned to message index ${this.contextWindowStartIndex}. Content pruned:`)
+                console.dir(messages.slice(0, this.contextWindowStartIndex))
+                console.log(
+                    `Number of messages in context window: ${context.length}. Window size* ${totalTokens}` + 
+                    `* Window size does not include the user message added this turn.`
+                ) 
+            }
+
+            return context.map((msg) => { return { role: msg.role, content: msg.content } })
         }
-
-
-
-        
-        return []
     }
 
     getUserWindowInfo = () => {
         const userContextWindow = this.client.getUserContextWindowSize()
-        const contextWindowSize = this.session.getContextWindowSize()
+        const contextWindowSize = this.session.getContextWindowSize(this.contextWindowStartIndex)
         const totalUserContextTokens = contextWindowSize.input + contextWindowSize.output
 
         return {

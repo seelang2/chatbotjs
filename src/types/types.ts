@@ -1,31 +1,9 @@
 
 
-interface Client {
-    model: Model,
-    sendQuery: (query: Message[]) => Promise<ResponseMessage>,
-    getModel: () => Model
-}
-
-interface ChatClient extends Client {
-    setModel: (modelType: string)=> string
-    getUserContextWindowSize: () => number
-}
-
-interface SdkClient<TResponse, TContent> extends Client {
-    sdk: unknown,
-    mapResponseToMessage: (response: TResponse) => unknown,
-    getModelDataFromEnv: () => Model,
-    parseContent(content: TContent): unknown
-}
-
 // Only defining text ContextBlock for now
 type AnthropicTextContent = {
     type: 'text',
     text: string
-}
-
-interface AnthropicResponse extends ApiResponse {
-    content: AnthropicTextContent[] 
 }
 
 type GptTextContent = {
@@ -38,9 +16,9 @@ type GptOutput = {
     type: string
 }
 
-interface GptResponse extends ApiResponse {
-    output: GptOutput[],
-    output_text: string
+type Token = {
+    input: number,
+    output: number
 }
 
 type Role = 'user' | 'assistant'
@@ -67,9 +45,13 @@ interface ApiResponse {
     }
 }
 
-type Token = {
-    input: number,
-    output: number
+interface AnthropicResponse extends ApiResponse {
+    content: AnthropicTextContent[] 
+}
+
+interface GptResponse extends ApiResponse {
+    output: GptOutput[],
+    output_text: string
 }
 
 type ModelType = "claude" | "gpt"
@@ -92,6 +74,24 @@ interface Conversation {
     messages: UserMessage[],
     total_cost: number,
     total_tokens: Token
+}
+
+interface Client {
+    model: Model,
+    sendQuery: (query: Message[]) => Promise<ResponseMessage>,
+    getModel: () => Model
+}
+
+interface ChatClient extends Client {
+    setModel: (modelType: string)=> string
+    getUserContextWindowSize: () => number
+}
+
+interface SdkClient<TResponse, TContent> extends Client {
+    sdk: unknown,
+    mapResponseToMessage: (response: TResponse) => unknown,
+    getModelDataFromEnv: () => Model,
+    parseContent(content: TContent): unknown
 }
 
 // unnecessary since model stores its own cost info, but could be useful for quick access

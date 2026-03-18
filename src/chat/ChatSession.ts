@@ -3,8 +3,7 @@ import type { Conversation, UserMessage, Message, ResponseMessage, Model, ModelT
 
 export class ChatSession {
 
-    constructor() {}
-
+    verbose: boolean = false
     session: Conversation = {
         session_id: `session-${Date.now()}`,
         started_at: new Date().toISOString(),
@@ -16,6 +15,11 @@ export class ChatSession {
             input: 0,
             output: 0
         }
+    }
+
+    constructor(verbose?: boolean) {
+        if ( typeof verbose !== 'undefined' ) this.verbose = verbose
+        // if (this.verbose) console.log('ChatSession instantiated in verbose mode')
     }
 
     setModelName = (modelName: string) => {
@@ -69,11 +73,23 @@ export class ChatSession {
         this.session.total_cost += data.cost
     }
 
-    getContextWindowSize = (altMessages?: Message[]): Token => {
+    getContextWindowSize = (startIndex: number = 0, altMessages?: Message[]): Token => {
         //console.log(`getContextWindowSize called. message length: ${this.session.messages.length}`)
-        if (this.session.messages.length < 1) return { input: 0, output: 0 }
+        const messages = typeof altMessages === 'undefined' ? this.session.messages : altMessages
+
+        if (messages.length < 1) return { input: 0, output: 0 }
+        
+        const contextWindow = messages.slice(startIndex)
+
+        if (this.verbose) {
+            console.log(`session.getContextWindowSize: context message source is ` + 
+                `${typeof altMessages === 'undefined' ? 'session messages' : 'external (passed in)'} ` + 
+                `starting from index ${startIndex}.`
+            )
+        }
+
         //let passes = 0
-        let contextTokens = this.session.messages.reduce(
+        let contextTokens = contextWindow.reduce(
             (total, message) => { 
                 //console.log(`Reducing messages. Pass ${++passes}`)
                 // Casting to ResponseMessage so TS recognizes token property
