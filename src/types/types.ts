@@ -45,6 +45,9 @@ interface ApiResponse {
     }
 }
 
+type TextFrame = {type: string, text: string}
+type TokenFrame = {type: string, tokens: {input: number, output: number}}
+
 interface AnthropicResponse extends ApiResponse {
     content: AnthropicTextContent[] 
 }
@@ -80,6 +83,7 @@ interface Client {
     model: Model,
     sendQuery: (query: Message[]) => Promise<ResponseMessage>,
     getModel: () => Model
+    sendStreamQuery: (query: Message[], streamEventHandler: CallableFunction) => unknown
 }
 
 interface ChatClient extends Client {
@@ -119,5 +123,7 @@ export type {
     ModelType, 
     Conversation, 
     Token, 
-    CostCalculation 
+    CostCalculation,
+    TextFrame,
+    TokenFrame
 }

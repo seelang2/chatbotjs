@@ -56,6 +56,17 @@ export class ModelClient implements ChatClient {
         return response
     }
 
+    async sendStreamQuery(query: Message[], streamEventHandler: CallableFunction) {
+        if (!this.client || typeof this.client.sendStreamQuery !== 'function') {
+            throw new Error('Model client is not set or does not have a sendStreamQuery method')
+        }
+
+        const events = await this.client.sendStreamQuery(query, streamEventHandler)
+        return events
+    }
+ 
+    callbackTest = (callback: CallableFunction) => { callback() }
+
     getUserContextWindowSize = () => {
         return this.model.windowSize * (1 - this.model.windowReservePercentage)
     }

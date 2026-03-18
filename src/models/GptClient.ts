@@ -4,29 +4,6 @@ import type { Message, ResponseMessage, Model, SdkClient, GptResponse, GptOutput
 import { calculateMessageCost } from '../utils/helpers.js';
 
 
-// const GptModel: Model = {
-//     name: "gpt-4.1-nano",
-//     type: "gpt",
-//     inputCostPerCS: 0.00006, 
-//     outputCostPerCS: 0.00006, 
-//     costScale: 1000, 
-//     windowSize: 200000,
-//     windowReservePercentage: 0.1
-// }
-
-// async function sendQuery(query: MessageHistory[]) {
-//     const client = new OpenAI();
-
-//     const response = await client.responses.create({
-//         model: "gpt-4.1-nano",
-//         // input: "Write a one-sentence bedtime story about a unicorn."
-//         input: query
-//     });
-
-//     return response // will need to transform this response into the standard ResponseMessage format defined in types.ts, including calculating tokens and cost based on the GptModel parameters
-// }
-
-
 export class GptClient implements SdkClient<GptResponse, GptResponse> {
  
     sdk = new OpenAI()
@@ -35,7 +12,8 @@ export class GptClient implements SdkClient<GptResponse, GptResponse> {
     constructor() {
         this.model = this.getModelDataFromEnv();
     }
-    
+
+    // TODO: get data from .env and not hardcoded data
     getModelDataFromEnv(): Model {
         return {
             name: "gpt-4.1-nano",
@@ -53,26 +31,50 @@ export class GptClient implements SdkClient<GptResponse, GptResponse> {
     }
    
     async sendQuery(query: Message[]): Promise<ResponseMessage> {
-
         const response = await this.sdk.responses.create({
             model: this.model.name,
-            // input: "Write a one-sentence bedtime story about a unicorn."
             input: query
         });
 
         return this.mapResponseToMessage(response as GptResponse)
     }
 
-    // Only handling text content in this CLI client, but will need to handle multiple content types in GUI clients
+     async sendStreamQuery(query: Message[], streamEventHandler: CallableFunction) {
+        const stream = await this.sdk.responses.create({
+            model: this.model.name,
+            input: query,
+            stream: true
+        });
+
+        var events = []
+        for await (const event of stream) {
+            events.push(event)
+
+            // will need to translate the event data into a universal format both APIs can map to
+            // currently only dealing with text and usage info
+            let frame = {}
+
+            if (event.type === "response.output_text.delta" && event.delta) {
+                frame = { type: 'delta_text', text: event.delta }
+            } else if (event.type === "response.completed" && event.response.usage) {
+                frame = { 
+                    type: 'token_usage', 
+                    tokens: { input: event.response.usage.input_tokens, output: event.response.usage.output_tokens } }
+            }
+
+            streamEventHandler(frame)
+        }
+
+        return events
+    }
+ 
+   // Only handling text content in this CLI client, but will need to handle multiple content types in GUI clients
     parseContent(content: GptResponse): string {
         if (typeof content.output_text != 'undefined') return content.output_text
 
         // If output_text isn't available then we do it the long way
-
         // filter output for messages
-
         // filter message content for output_text
-
         // aggregate output_text blocks
         
         return '';
