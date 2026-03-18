@@ -15,6 +15,10 @@ export default function getCliArgs() {
             'verbose': {
                 type: 'boolean',
                 short: 'v'
+            },
+            'debug': {
+                type: 'boolean',
+                short: 'd'
             }
         }
     })

@@ -3,7 +3,7 @@ import type { Conversation, UserMessage, Message, ResponseMessage, Model, ModelT
 
 export class ChatSession {
 
-    verbose: boolean = false
+    verbose = false
     session: Conversation = {
         session_id: `session-${Date.now()}`,
         started_at: new Date().toISOString(),
@@ -27,8 +27,10 @@ export class ChatSession {
     }
 
     getId = () => { return this.session.session_id }
-    
+
     getModelName = () => { return this.session.model }
+
+    getMessageCount = () => { return this.session.messages.length }
 
     get = () => { return this.session }
 
@@ -74,17 +76,14 @@ export class ChatSession {
     }
 
     getContextWindowSize = (startIndex: number = 0, altMessages?: Message[]): Token => {
-        //console.log(`getContextWindowSize called. message length: ${this.session.messages.length}`)
         const messages = typeof altMessages === 'undefined' ? this.session.messages : altMessages
-
         if (messages.length < 1) return { input: 0, output: 0 }
-        
         const contextWindow = messages.slice(startIndex)
 
         if (this.verbose) {
             console.log(`session.getContextWindowSize: context message source is ` + 
                 `${typeof altMessages === 'undefined' ? 'session messages' : 'external (passed in)'} ` + 
-                `starting from index ${startIndex}.`
+                `starting from index ${startIndex}. Total messages in window: ${contextWindow.length}`
             )
         }
 
@@ -136,8 +135,5 @@ export class ChatSession {
         return this.get()
     }
 
-
-
 }
-
 

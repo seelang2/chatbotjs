@@ -9,8 +9,9 @@ import { countTokens } from '../utils/helpers.js';
 export default class ChatManager {
 
     supportedModelTypes: ModelType[] = ['claude', 'gpt']
-    streaming: boolean
-    verbose: boolean
+    streaming: boolean = false
+    verbose: boolean = false
+    debug: boolean = false
     contextWindowStartIndex = 0
 
     // User context window threshold to warn users they are nearing limit (percent)
@@ -24,7 +25,7 @@ export default class ChatManager {
     })
     client: ChatClient
 
-    constructor(modelType: string, streaming: boolean = false, verbose: boolean = false) {
+    constructor(modelType: string, streaming = false, verbose = false, debug = false) {
         this.streaming = streaming
         this.verbose = verbose
         this.session = new ChatSession(this.verbose)
@@ -45,7 +46,6 @@ export default class ChatManager {
         console.log(`You are now in a session with ID: ${sessionId} using model: ${modelName}`)
         console.log(`Type your message and press Enter to send. Type '/exit' or '/quit' to end the session.`)
         console.log(`Available commands: /model [model_name], /clear, /save, /export, /cost, /help`)
-        // console.log('\n')
 
         // Initial user prompt
         this.prompt()
@@ -61,8 +61,14 @@ export default class ChatManager {
             case query === '/quit':
                 this.end();
                 return;
-            case (query.split(' ')[0]) === '/model': // switch models
+            case (query.split(' ')[0]) === '/model': 
                 this.setModel(query)
+                break;
+            case (query.split(' ')[0]) === '/debug': 
+                this.setDebug(query)
+                break;
+            case (query.split(' ')[0]) === '/verbose': 
+                this.setVerbose(query)
                 break;
             case query === '/clear': // reset session message history
                 this.session.clearMessages()
@@ -75,6 +81,9 @@ export default class ChatManager {
                 break;
             case query === '/cost': // show current session cost and token usage
                 this.displaySessionCostAndUsage()
+                break;
+            case query === '/reset':
+                this.reset()
                 break;
             case query === '/help':
                 this.displayHelp()
@@ -93,7 +102,6 @@ export default class ChatManager {
         
         // Call prompt again after processing input. This repeats until user exits.
         this.prompt() 
-
     }
     
     prompt = () => {
@@ -113,6 +121,39 @@ export default class ChatManager {
         this.rl.close()
     }
 
+    reset = () => {
+        const oldSession = this.session.reset()
+        console.log(`Session has been reset. New session id: ${this.session.getId()}`)
+    }
+
+    setDebug = (query: string) => {
+        const state = query.split(' ')[1] || ' '
+        switch(state.toLowerCase()) {
+            case 'on':
+                this.debug = true
+                break
+            case 'off':
+                this.debug = false
+                break
+            default:
+                console.log('Invalid option. Valid options are on, off')
+        }
+    }
+
+    setVerbose = (query: string) => {
+        const state = query.split(' ')[1] || ' '
+        switch(state.toLowerCase()) {
+            case 'on':
+                this.verbose = true
+                break
+            case 'off':
+                this.verbose = false
+                break
+            default:
+                console.log('Invalid option. Valid options are on, off')
+        }
+    }
+
     setModel = (query: string) => {
         const modelType = query.split(' ')[1] || ' '
         let modelName: string
@@ -130,22 +171,18 @@ export default class ChatManager {
     displayHelp = () => {
         console.log('Available commands:')
         console.log(`  /model [model_name] - Switch models. Valid options are: ${this.supportedModelTypes.join(', ')}.`)
+        console.log('  /debug [on | off] - Display debug information')
+        console.log('  /verbose [on | off] - Verbose information')
         console.log('  /clear - Reset session message history')
         console.log('  /save - Save session as JSON file')
         console.log('  /export - Export to markdown')
         console.log('  /cost - Show current session cost and token usage')
+        console.log('  /reset - Reset session')
         console.log('  /help - Show this help message')
         console.log('  /exit or /quit - End the session')
     }
 
     handleQuery = async (query: string) => {
-        let response: ResponseMessage = await this.processQuery(query);
-        this.displayResponse(response)
-        this.checkContentWindowLimit()
-    }
-
-    processQuery = async (query: string) => {
-        // update session with user message
         const userMessage: UserMessage = {
             role: 'user',
             content: query,
@@ -153,47 +190,32 @@ export default class ChatManager {
         }
         this.session.addMessage(userMessage)
 
-        // TODO: add sliding context window management here.
-        /*
-            Sliding context window adjusts the context size being sent to the API by
-            omitting the earliest messages so the input tokens is under the limit 
-            specified by Model.windowSize and Model.windowReservePercentage respectively.
-        */
+        if (this.streaming) {
+            await this.processStreamQuery()
+        } else {
+            let response: ResponseMessage = await this.processQuery();
+            this.displayResponse(response)
+        
+        }
+        this.checkContentWindowLimit()
+    }
 
+    processQuery = async () => {
         const context = this.getContext()
 
-        
-
-
-        if (this.verbose) {
-            // console.log('contextWindowSize')
-            // console.dir(contextWindowSize)
-            // console.log(`Current window size: ${contextWindowSize.input + contextWindowSize.output} `+
-            //     `(${contextWindowSize.input} input, ${contextWindowSize.output} output)`)
-            
-            
-        }
-
-        
-
-        if (this.verbose) {
-            // console.log(`You asked: ${query}`);
-            console.log(Ansi.grey + 'Active message chain:' + Ansi.reset)
-            // console.dir(this.session.getMessages(true))
+        if (this.debug) {
+            console.log(Ansi.orange + 'Active message chain:' + Ansi.reset)
             console.dir(context)
             console.log('\n')
         }
 
-        // send query to model and get response
-        // TODO: add throtting here and manage message history to stay within model context window limits
-        //let responseMessage = await this.client.sendQuery(this.session.getMessages(true)) 
-        let responseMessage = await this.client.sendQuery(context) 
+        // TODO: add rate limiting
+
+        let responseMessage = await this.client.sendQuery(context)
         
         // TODO: Rework error handling
 
-        // update session with model response, tokens, and cost
         this.session.addResponseMessage(responseMessage)
-
         this.session.updateTotals({ 
             cost: responseMessage.cost, 
             input_tokens: responseMessage.tokens.input, 
@@ -201,64 +223,61 @@ export default class ChatManager {
         })
 
         return responseMessage
+    }
 
+    processStreamQuery = async () => {
+        //
     }
 
     getContext = (): Message[] => {
-        // get DEEP COPY of messages (don't affect original)
-        
-        // ...existing code...
-        //var context = this.session.getMessages().filter((x): x is Message => x !== undefined).map((x) => x);
-        // ...existing code...
-        
-        // var context = this.session.getMessages().map((x) => x)
         const messages = this.session.getMessages()
-        if (this.verbose) { 
+        if (this.debug) { 
             console.log(`getContext: messages: `); 
             console.dir(messages, {depth: 3}); 
             console.log(`Total messages: ${messages.length}`) 
         }
         
-        // get context window info
         const info = this.getUserWindowInfo()
-        // if context < maxcontent
+
         if (info.currentUserContextSize < info.maxUserContextSize) {
-            // map messages to Message
             const context = messages.map((msg) => { return { role: msg.role, content: msg.content } })
-            // return remapped messages
             return context
-        } else { // else
+        } else { 
             console.log(
                 `getContext: user context window size exceeded ` + 
                 `(${info.currentUserContextSize} of ${info.maxUserContextSize} tokens used.)`
             )
 
-            // prune oldest messages until context < maxcontent:
-            // working backwards from most recent
-                // if totalcounter + currentitemtotal > maxcontent
-                    // split array
-                    // display verbose info about post-split items
-                    // pre-split items
             let totalTokens = 0
             let context = []
 
             for (let i = messages.length - 1; i >= 0; i--) {
                 const msg = messages[i]
+                
                 if (!msg) { continue }
+                
                 const msgTokens = countTokens(msg)
+                
                 if (totalTokens + msgTokens >= info.maxUserContextSize) {
                     this.contextWindowStartIndex = i + 1 // include current item
                     break
                 }
+                
                 totalTokens += msgTokens
                 context.unshift(msg) // add to front as we're moving backwards
+            }
 
+            // display info about items dropped
+            if (this.verbose) {
+                console.log(`Older messages will be pruned to message index ${this.contextWindowStartIndex}. `)
+            }
+
+            if (this.debug) {
+                console.log('Content pruned:')
+                console.dir(messages.slice(0, this.contextWindowStartIndex))
             }
 
             if (this.verbose) {
-                // display info about items dropped
-                console.log(`Older messages will be pruned to message index ${this.contextWindowStartIndex}. Content pruned:`)
-                console.dir(messages.slice(0, this.contextWindowStartIndex))
                 console.log(
                     `Number of messages in context window: ${context.length}. Window size* ${totalTokens}` + 
                     `* Window size does not include the user message added this turn.`
@@ -292,15 +311,17 @@ export default class ChatManager {
 
     checkContentWindowLimit = () => {
         const info = this.getUserWindowInfo()
+        const overLimit = info.currentUserContextSize < info.maxUserContextSize ? false : true
         if (this.warnContextLimitNear()) {
             console.log(
                 `WARNING: ` + 
-                `You are nearing the context window limit. If the limit is reached, older messages ` +
+                `You ${overLimit ? 'have exceeded' : 'are nearing'} ` + 
+                `the context window limit. ${overLimit ? 'O': 'If the limit is reached, o'}lder messages ` +
                 `will be removed from the context queue and may affect conversation quality. `
             ) 
             if (this.verbose) {
                 console.log(
-                    `${info.userContextUsagePercent}% (${info.currentUserContextSize}) of ` + 
+                    `${info.userContextUsagePercent.toFixed(3)}% (${info.currentUserContextSize}) of ` + 
                     `${info.maxUserContextSize} tokens used.`
                 )
             }
@@ -318,7 +339,6 @@ export default class ChatManager {
                 `Cost: $${response.cost.toFixed(6)} | Total: $${summary.total_cost.toFixed(6)} ]`
                 + Ansi.reset)
         }
-
     }
 
     displaySessionCostAndUsage = () => {
@@ -331,12 +351,11 @@ export default class ChatManager {
 
     displayChatSummary = (session: Conversation) => {
 
-        if (this.verbose) {
+        if (this.debug) {
             console.log(Ansi.grey + 'Session dump:' + Ansi.reset)
             console.dir(session)
         }
 
-        //const summary = this.session.getSummary()
         console.log('Session Summary:')
         console.log(`Session ID: ${session.session_id}`)
         console.log(`Model: ${session.model}`)
@@ -348,7 +367,5 @@ export default class ChatManager {
             `${session.total_tokens.input + session.total_tokens.output} total`)
         console.log(`Total cost: $${session.total_cost.toFixed(6)}`)
     }
-
-
 
 }
